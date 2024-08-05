@@ -4,68 +4,116 @@ using UnityEngine.InputSystem;
 public class newRocketPropelling : MonoBehaviour
 {
     [Header("Thrust Settings")]
-    public float thrustPower = 10f;      // Base thrust power, adjust as necessary
-    public float rotationTorque = 5f;    // Torque applied for rotation
+    public float weight = 1f;            // Weight of the rocket
+    public float desiredTWR = 1.5f;      // Desired thrust-to-weight ratio
 
-    [Header("Input Actions")]
-    public InputAction thrustAction;
-    public InputAction rotateAction;
+    private float maxThrust;             // Maximum thrust power, calculated based on TWR
+    public float thrustIncreaseRate = 10f; // Rate at which thrust increases per second
+    private float currentThrust = 0f;    // Current thrust level
+
+    [Header("Rotation Settings")]
+    public float maxRotationTorque = 5f;   // Maximum torque for rotation
+    public float rotationAcceleration = 2f; // How quickly the rotation speed ramps up
+    public float aerodynamicDrag = 0.5f;    // Custom aerodynamic drag coefficient
 
     private Rigidbody rb;
-    private ConstantForce cf;
+    private InputAction increaseThrustAction;
+    private InputAction decreaseThrustAction;
+    private InputAction rotateLeftAction;
+    private InputAction rotateRightAction;
+
+    private float currentRotationSpeed = 0f; // Current speed of rotation
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        cf = GetComponent<ConstantForce>();
-        InitializeInput();
+
+        // Calculate max thrust based on desired TWR
+        maxThrust = desiredTWR * rb.mass * Physics.gravity.magnitude;
+
+        // Set higher angular drag to simulate aerodynamic resistance
+        rb.angularDrag = aerodynamicDrag;
+        rb.mass = weight; // Set the mass of the rocket according to its weight
+
+        // Initialize thrust control actions
+        increaseThrustAction = new InputAction("IncreaseThrust", InputActionType.Button, "<Keyboard>/w");
+        decreaseThrustAction = new InputAction("DecreaseThrust", InputActionType.Button, "<Keyboard>/s");
+
+        // Initialize rotation actions
+        rotateLeftAction = new InputAction("RotateLeft", InputActionType.Button, "<Keyboard>/a");
+        rotateRightAction = new InputAction("RotateRight", InputActionType.Button, "<Keyboard>/d");
+
+        // Enable all actions
+        increaseThrustAction.Enable();
+        decreaseThrustAction.Enable();
+        rotateLeftAction.Enable();
+        rotateRightAction.Enable();
     }
 
-    private void InitializeInput()
+    private void Update()
     {
-        thrustAction.Enable();
-        rotateAction.Enable();
+        if (increaseThrustAction.IsPressed())
+        {
+            AdjustThrust(thrustIncreaseRate * Time.deltaTime);
+        }
+        if (decreaseThrustAction.IsPressed())
+        {
+            AdjustThrust(-thrustIncreaseRate * Time.deltaTime);
+        }
 
-        thrustAction.performed += context => UpdateThrust(context.ReadValue<float>());
-        thrustAction.canceled += context => UpdateThrust(0);
-
-        rotateAction.performed += context => UpdateRotation(context.ReadValue<float>());
-        rotateAction.canceled += context => UpdateRotation(0);
+        float rotationInput = 0f;
+        if (rotateLeftAction.IsPressed())
+        {
+            rotationInput = -1f;
+        }
+        if (rotateRightAction.IsPressed())
+        {
+            rotationInput = 1f;
+        }
+        
+        AdjustRotation(rotationInput);
     }
 
-    private void UpdateThrust(float thrustInput)
+    private void FixedUpdate()
     {
-        if (cf != null) // Ensure ConstantForce component is not null
-        {
-            cf.force = transform.forward * thrustInput * thrustPower;
-        }
-        else
-        {
-            Debug.LogError("ConstantForce component is missing or not initialized.");
-        }
+        // Calculate thrust-to-weight ratio
+        float twr = currentThrust / (rb.mass * Physics.gravity.magnitude);
+
+        // Apply current thrust as a force in the direction the rocket is facing
+        rb.AddForce(transform.forward * currentThrust);
+
+        // Debug log for thrust-to-weight ratio and acceleration
+        Debug.Log($"Thrust-to-Weight Ratio: {twr}, Current Thrust: {currentThrust}");
+
+        // Apply rotation with damping to simulate aerodynamic resistance
+        ApplyDampedRotation();
     }
 
-    private void UpdateRotation(float rotationInput)
+    private void AdjustThrust(float delta)
     {
-        if (rb != null) // Ensure Rigidbody component is not null
-        {
-            rb.AddTorque(transform.up * rotationInput * rotationTorque);
-        }
-        else
-        {
-            Debug.LogError("Rigidbody component is missing or not initialized.");
-        }
+        currentThrust += delta;
+        currentThrust = Mathf.Clamp(currentThrust, 0, maxThrust);
+    }
+
+    private void AdjustRotation(float input)
+    {
+        // Gradually increase or decrease the rotational speed based on thrust-to-weight ratio
+        float rotationFactor = Mathf.Lerp(0.5f, 1.5f, currentThrust / maxThrust);
+        currentRotationSpeed = Mathf.MoveTowards(currentRotationSpeed, input * maxRotationTorque * rotationFactor, rotationAcceleration * Time.deltaTime);
+    }
+
+    private void ApplyDampedRotation()
+    {
+        // Apply the calculated torque with current rotation speed
+        rb.AddTorque(Vector3.forward * currentRotationSpeed);
     }
 
     private void OnDisable()
     {
-        if (thrustAction != null)
-        {
-            thrustAction.Disable();
-        }
-        if (rotateAction != null)
-        {
-            rotateAction.Disable();
-        }
+        // Disable all actions when the object is disabled
+        increaseThrustAction.Disable();
+        decreaseThrustAction.Disable();
+        rotateLeftAction.Disable();
+        rotateRightAction.Disable();
     }
 }
