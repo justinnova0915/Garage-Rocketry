@@ -39,9 +39,9 @@ MonoBehaviour:
   - 
   - 
   - 
-  - 
-  - 
-  - 
-  - 
+  - HeldObjects
+  - AttachSmall
+  - AttachLarge
+  - AttachMedium
   - Gaze
   - Teleport
