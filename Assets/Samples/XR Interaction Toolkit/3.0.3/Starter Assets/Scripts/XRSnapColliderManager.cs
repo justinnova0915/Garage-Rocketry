@@ -30,7 +30,7 @@ public class SnapFixer : MonoBehaviour
     {
         // When it’s removed from a socket, re-enable its own socket
         socketInteractor.enabled = true;
-        // Let physics take over agai
+        // Let physics take over again
         rb.isKinematic = false;
     }
 
