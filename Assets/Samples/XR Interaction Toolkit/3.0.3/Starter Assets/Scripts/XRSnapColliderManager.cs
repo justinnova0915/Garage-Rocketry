@@ -1,68 +1,52 @@
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 
-public class XRSnapColliderManager : MonoBehaviour
+public class SnapFixer : MonoBehaviour
 {
-    private UnityEngine.XR.Interaction.Toolkit.Interactors.XRSocketInteractor socketInteractor;
     private UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable grabInteractable;
-    private Collider activeSocketCollider; // ✅ Store the specific socket collider that is being used
+    private UnityEngine.XR.Interaction.Toolkit.Interactors.XRSocketInteractor socketInteractor;
+    private Rigidbody rb;
 
-    void Awake()
+    void Start()
     {
         grabInteractable = GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
-        socketInteractor = GetComponent<UnityEngine.XR.Interaction.Toolkit.Interactors.XRSocketInteractor>();
+        socketInteractor = GetComponentInChildren<UnityEngine.XR.Interaction.Toolkit.Interactors.XRSocketInteractor>(); // Since it’s on a child
+        rb = GetComponent<Rigidbody>();
 
-        if (grabInteractable != null)
-        {
-            grabInteractable.selectEntered.AddListener(OnGrabbed);
-            grabInteractable.selectExited.AddListener(OnReleased);
-        }
-
-        if (socketInteractor != null)
-        {
-            socketInteractor.selectEntered.AddListener(OnSnappedIntoSocket);
-            socketInteractor.selectExited.AddListener(OnRemovedFromSocket);
-        }
+        grabInteractable.selectExited.AddListener(OnReleased);
+        socketInteractor.selectEntered.AddListener(OnSnappedTo);
+        socketInteractor.selectExited.AddListener(OnUnsnapped);
     }
 
-    void OnGrabbed(SelectEnterEventArgs args)
+    void OnSnappedTo(SelectEnterEventArgs args)
     {
-        if (activeSocketCollider != null)
-        {
-            activeSocketCollider.enabled = true; // ✅ Re-enable only the socket that was used
-            Debug.Log(gameObject.name + " grabbed - socket collider re-enabled.");
-        }
+        // When this object snaps to another socket, disable its own socket
+        socketInteractor.enabled = false;
+        // Freeze its position to stop jittering or drifting
+        rb.isKinematic = true;
+    }
+
+    void OnUnsnapped(SelectExitEventArgs args)
+    {
+        // When it’s removed from a socket, re-enable its own socket
+        socketInteractor.enabled = true;
+        // Let physics take over agai
+        rb.isKinematic = false;
     }
 
     void OnReleased(SelectExitEventArgs args)
     {
-        if (activeSocketCollider != null)
+        // If dropped and not snapped, ensure physics is active
+        if (!socketInteractor.hasSelection)
         {
-            activeSocketCollider.enabled = true; // ✅ Ensure it stays enabled after release
-            Debug.Log(gameObject.name + " released - socket collider enabled.");
+            rb.isKinematic = false;
         }
     }
 
-    void OnSnappedIntoSocket(SelectEnterEventArgs args)
+    void OnDestroy()
     {
-        // ✅ Find which specific collider was used for snapping
-        Collider socketCollider = args.interactableObject.transform.GetComponent<Collider>();
-
-        if (socketCollider != null)
-        {
-            activeSocketCollider = socketCollider; // Store the specific socket that was used
-            activeSocketCollider.enabled = false; // ❌ Disable ONLY that socket
-            Debug.Log(gameObject.name + " snapped - socket collider disabled.");
-        }
-    }
-
-    void OnRemovedFromSocket(SelectExitEventArgs args)
-    {
-        if (activeSocketCollider != null)
-        {
-            activeSocketCollider.enabled = true; // ✅ Re-enable ONLY the socket that was used
-            Debug.Log(gameObject.name + " removed from socket - socket collider enabled.");
-            activeSocketCollider = null; // Reset
-        }
+        grabInteractable.selectExited.RemoveListener(OnReleased);
+        socketInteractor.selectEntered.RemoveListener(OnSnappedTo);
+        socketInteractor.selectExited.RemoveListener(OnUnsnapped);
     }
 }
